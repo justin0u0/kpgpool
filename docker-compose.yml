@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:15.3
+    container_name: postgres
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    network_mode: host
+
+  kpgpool-pgbouncer:
+    container_name: kpgpool-pgbouncer
+    environment:
+      # https://hub.docker.com/r/bitnami/pgbouncer/
+      POSTGRESQL_HOST: "10.140.0.10"
+      POSTGRESQL_USERNAME: postgres
+      POSTGRESQL_PASSWORD: postgres
+      POSTGRESQL_DATABASE: postgres
+      PGBOUNCER_PORT: "8432"
+      PGBOUNCER_DATABASE: postgres
+      PGBOUNCER_MIN_POOL_SIZE: 20
+      PGBOUNCER_DEFAULT_POOL_SIZE: 20
+      PGBOUNCER_MAX_PREPARED_STATEMENTS: 100
+      PGBOUNCER_POOL_MODE: transaction
+      PGBOUNCER_IGNORE_STARTUP_PARAMETERS: extra_float_digits
+      # PGBOUNCER_SERVER_ROUND_ROBIN: "1"
+      # PGBOUNCER_EXTRA_FLAGS: --verbose
+    image: bitnami/pgbouncer:1.21.0
+    privileged: true
+    network_mode: host
+
+  kpgpool-pool:
+    build:
+      context: .
+      target: kpgpool-pool
+    container_name: kpgpool-pool
+    # transaction mode
+    command: ["kpgpool", "pool", "-p", "7432", "-s", "20"]
+    # session mode
+    # command: ["kpgpool", "pool", "-p", "7432", "-s", "20", "-m", "session"]
+    restart: always
+    privileged: true
+    volumes:
+      - /lib/modules:/lib/modules
+      - /usr/src:/usr/src
+      - /sys:/sys
+    network_mode: host
+
+  kpgpool-bpf-pool:
+    build:
+      context: .
+      target: kpgpool-pool
+    container_name: kpgpool-bpf-pool
+    command: ["kpgpool", "pool", "-p", "6432", "-s", "20", "-b"]
+    restart: always
+    privileged: true
+    volumes:
+      - /lib/modules:/lib/modules
+      - /usr/src:/usr/src
+      - /sys:/sys
+    network_mode: host
