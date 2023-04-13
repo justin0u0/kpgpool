@@ -21,11 +21,10 @@ func loadBpfCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 	}
 
-	// FIXME:
-	// map is not updated although the program does not return any error
 	updateSockhashCommand := &cobra.Command{
-		Use:   "update-sockhash [pid] [fd] [key]",
+		Use:   "update-sockhash [pid] [pid fd] [key]",
 		Short: "update the sockhash map",
+		Long:  "Use `ss -tplne state established` to get the PID and PID FD.",
 		Run:   runUpdateSockhashMap,
 		Args:  cobra.ExactArgs(3),
 	}
@@ -47,7 +46,7 @@ func runUpdateSockhashMap(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatalf("could not parse pid: %s", err)
 	}
-	fd, err := strconv.Atoi(args[1])
+	pidfd, err := strconv.Atoi(args[1])
 	if err != nil {
 		log.Fatalf("could not parse fd: %s", err)
 	}
@@ -56,5 +55,5 @@ func runUpdateSockhashMap(cmd *cobra.Command, args []string) {
 		log.Fatalf("could not parse key: %s", err)
 	}
 
-	bpfgo.UpdateSockhashMap(pid, fd, key)
+	bpfgo.UpdateSockhashMap(pid, pidfd, key)
 }

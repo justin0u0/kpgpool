@@ -10,7 +10,7 @@ services:
     image: bpfpgpool
     build:
       context: .
-      target: bpfpgpool
+      target: bpfpgpool-debug
     container_name: bpfpgpool
     environment:
       # https://hub.docker.com/r/bitnami/pgbouncer/

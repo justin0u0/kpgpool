@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"syscall"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -13,6 +14,11 @@ import (
 )
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-O2 -Wall" sklookup ./bpf/sklookup.c
+
+var (
+	bpffs           = "/usr/fs/bpf"
+	sockhashPinPath = bpffs + "/sockhash"
+)
 
 func LoadSklookupProg(ctx context.Context, program string) {
 	var objs sklookupObjects
@@ -46,12 +52,27 @@ func LoadSklookupProg(ctx context.Context, program string) {
 
 	log.Printf("attached sk_lookup/%s program to netns: %d", program, netns.Fd())
 
+	if err := mountBpffs(); err != nil {
+		log.Fatalf("could not mount bpffs: %s", err)
+	}
+
+	if err := objs.Sockhash.Pin(sockhashPinPath); err != nil {
+		log.Fatalf("could not pin sockhash map: %s", err)
+	}
+	defer func() {
+		// FIXME: unpin is not working now
+		if err := objs.Sockhash.Unpin(); err != nil {
+			log.Printf("could not unpin sockhash map: %s", err)
+		}
+	}()
+	log.Printf("pinned sockhash map to %s", sockhashPinPath)
+
 	info, err := objs.Sockhash.Info()
 	if err != nil {
 		log.Fatalf("could not get sockhash map info: %s", err)
 	}
 	if id, ok := info.ID(); ok {
-		log.Println("sockhash map id:", id)
+		log.Println("sockhash map id:", id, "fd:", objs.Sockhash.FD())
 	}
 
 	<-ctx.Done()
@@ -61,6 +82,20 @@ func LoadSklookupProg(ctx context.Context, program string) {
 
 // UpdateSockhashMap updates the socket FD into the sockhash map with the given key.
 func UpdateSockhashMap(pid, fd int, key uint64) {
+	m, err := ebpf.LoadPinnedMap(sockhashPinPath, nil)
+	if err != nil {
+		log.Fatalf("could not load pinned sockhash map: %s", err)
+	}
+	defer m.Close()
+
+	info, err := m.Info()
+	if err != nil {
+		log.Fatalf("could not get sockhash map info: %s", err)
+	}
+	if id, ok := info.ID(); ok {
+		log.Println("sockhash map id:", id, "fd:", m.FD())
+	}
+
 	pidFd, err := pidfd.Open(pid, 0)
 	if err != nil {
 		log.Fatalf("could not open pidfd: %s", err)
@@ -73,22 +108,8 @@ func UpdateSockhashMap(pid, fd int, key uint64) {
 
 	log.Println("current pid:", os.Getpid(), "get pid:", pid, "fd:", fd, "sockfd:", sockFd)
 
-	var objs sklookupMaps
-	if err := loadSklookupObjects(&objs, nil); err != nil {
-		log.Fatalf("could not load maps: %s", err)
-	}
-	defer objs.Close()
-
-	info, err := objs.Sockhash.Info()
-	if err != nil {
-		log.Fatalf("could not get sockhash map info: %s", err)
-	}
-	if id, ok := info.ID(); ok {
-		log.Println("sockhash map id:", id)
-	}
-
 	var value uint32 = uint32(sockFd)
-	if err := objs.Sockhash.Put(&key, &value); err != nil {
+	if err := m.Put(&key, &value); err != nil {
 		log.Fatalf("could not update sockhash map: %s", err)
 	}
 
@@ -103,4 +124,16 @@ func handleLoadError(err error) {
 		}
 	}
 	log.Fatalf("could not load program: %s", err)
+}
+
+func mountBpffs() error {
+	if err := os.MkdirAll(bpffs, 0755); err != nil {
+		return fmt.Errorf("could not create bpffs directory: %s", err)
+	}
+
+	if err := syscall.Mount("bpf", bpffs, "bpf", 0, ""); err != nil {
+		return fmt.Errorf("could not mount bpffs: %s", err)
+	}
+
+	return nil
 }
