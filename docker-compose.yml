@@ -4,21 +4,63 @@ services:
     container_name: postgres
     environment:
       POSTGRES_HOST_AUTH_METHOD: trust
-    privileged: true
+    network_mode: host
 
-  bpfpgpool:
-    image: bpfpgpool
+  # bpfpgpool-pgbouncer:
+  #   build:
+  #     context: .
+  #     target: bpfpgpool-pgbouncer
+  #   container_name: bpfpgpool-pgbouncer
+  #   environment:
+  #     # https://hub.docker.com/r/bitnami/pgbouncer/
+  #     POSTGRESQL_HOST: "10.121.240.168"
+  #     POSTGRESQL_PASSWORD: postgres
+  #     PGBOUNCER_MIN_POOL_SIZE: 5
+  #     PGBOUNCER_DEFAULT_POOL_SIZE: 10
+  #     PGBOUNCER_AUTH_TYPE: trust
+  #     PGBOUNCER_EXTRA_FLAGS: --verbose
+  #     ENABLE_BPF: true
+  #     ENABLE_TSHARK: true
+  #   image: bpfpgpool:pgbouncer
+  #   privileged: true
+  #   volumes:
+  #     - ./conf/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
+
+  bpfpgpool-pgcat:
     build:
       context: .
-      target: bpfpgpool-debug
-    container_name: bpfpgpool
+      target: bpfpgpool-pgcat
+    container_name: bpfpgpool-pgcat
     environment:
-      # https://hub.docker.com/r/bitnami/pgbouncer/
-      POSTGRESQL_HOST: postgres
-      POSTGRESQL_PASSWORD: postgres
-      PGBOUNCER_MIN_POOL_SIZE: 5
-      PGBOUNCER_DEFAULT_POOL_SIZE: 10
-      PGBOUNCER_AUTH_TYPE: trust
+      RUST_LOG: debug
+      ENABLE_BPF: true
+      # ENABLE_TSHARK: true
+    image: bpfpgpool:pgcat
     privileged: true
-    ports:
-      - 6432:6432
+    volumes:
+      - ./conf/pgcat.toml:/etc/pgcat/pgcat.toml
+    network_mode: host
+
+  bpfpgpool-pgclient-1:
+    build:
+      context: .
+      target: bpfpgpool-pgclient
+    environment:
+      PGPASSWORD: password
+    image: bpfpgpool:pgclient
+    restart: always
+    network_mode: host
+
+  # bpfpgpool-pgclient-2:
+  #   build:
+  #     context: .
+  #     target: bpfpgpool-pgclient
+  #   image: bpfpgpool:pgclient
+  #   restart: always
+
+  # bpfpgpool-pgclient-3:
+  #   build:
+  #     context: .
+  #     target: bpfpgpool-pgclient
+  #   image: bpfpgpool:pgclient
+  #   restart: always

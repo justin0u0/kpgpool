@@ -2,7 +2,6 @@ package pooler
 
 import (
 	"context"
-	"log"
 	"net"
 
 	"github.com/jackc/pgx/v5"
@@ -69,8 +68,6 @@ func (m *pgbouncerPooler) GetLinks(ctx context.Context) ([]*Link, error) {
 				clientIP = uint32(ipv4[0])<<24 | uint32(ipv4[1])<<16 | uint32(ipv4[2])<<8 | uint32(ipv4[3])
 			}
 
-			log.Println("[GetLink] client addr:", addr, "port:", port, "link:", link, "clientIP:", clientIP)
-
 			if clientIP != 0 {
 				links[link] = &Link{
 					ClientIP:   clientIP,
@@ -93,8 +90,8 @@ func (m *pgbouncerPooler) GetLinks(ctx context.Context) ([]*Link, error) {
 
 		for rows.Next() {
 			var (
-				ptr  string
-				port uint16
+				ptr       string
+				localPort uint16
 			)
 
 			if err := rows.Scan(
@@ -103,9 +100,9 @@ func (m *pgbouncerPooler) GetLinks(ctx context.Context) ([]*Link, error) {
 				nil, // database
 				nil, // state
 				nil, // addr
-				&port,
+				nil, // port
 				nil, // local_addr
-				nil, // local_port
+				&localPort,
 				nil, // connect_time
 				nil, // request_time
 				nil, // wait
@@ -120,10 +117,8 @@ func (m *pgbouncerPooler) GetLinks(ctx context.Context) ([]*Link, error) {
 				return nil, err
 			}
 
-			log.Println("[GetLink] server ptr:", ptr, "port:", port)
-
 			if link, ok := links[ptr]; ok {
-				link.ServerPort = port
+				link.ServerPort = localPort
 			}
 		}
 	}

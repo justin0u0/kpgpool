@@ -15,6 +15,7 @@ func main() {
 
 	cmd.AddCommand(
 		loadBpfCommand(),
+		pgCommand(),
 		pgbouncerCommand(),
 	)
 

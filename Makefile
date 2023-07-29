@@ -1,7 +1,7 @@
-all: bpfgo/bpf/*.o build
+all: bpf/*.o build
 
-bpfgo/bpf/*.o: bpfgo/bpf/*.c
-	go generate ./bpfgo/...
+bpf/*.o: bpf/*.c
+	go generate ./bpf/...
 
 .PHONY: build
 build:
@@ -9,7 +9,7 @@ build:
 
 .PHONY: up
 up:
-	docker-compose up -d --build
+	docker-compose up -d --build --force-recreate
 
 .PHONY: exec
 exec:
