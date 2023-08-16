@@ -21,4 +21,4 @@ FROM golang:1.19 AS bpfpgpool-pgclient
 
 COPY bin/bpfpgpool /usr/local/bin/bpfpgpool
 
-CMD ["bpfpgpool", "pg", "loop-query", "-u", "host=10.121.240.164 port=6432 user=postgres password=password dbname=postgres sslmode=disable connect_timeout=5", "-c", "1"]
+CMD ["bpfpgpool", "pg", "loop-query", "-u", "host=10.121.240.150 port=6432 user=postgres password=password dbname=postgres sslmode=disable connect_timeout=5", "-c", "1"]
