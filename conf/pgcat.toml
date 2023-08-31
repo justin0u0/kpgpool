@@ -51,23 +51,25 @@ admin_password = "postgres"
 # configs are structured as pool.<pool_name>
 # the pool_name is what clients use as database name when connecting
 # For the example below a client can connect using "postgres://sharding_user:sharding_user@pgcat_host:pgcat_port/sharded"
-[pools.test_bpf_pgcat]
+[pools.bpfpgpool]
 pool_mode = "transaction"
 default_role = "any"
 query_parser_enabled = false
 primary_reads_enabled = false
 sharding_function = "pg_bigint_hash"
 
-[pools.test_bpf_pgcat.users.0]
-username = "postgres"
-password = "password"
+[pools.bpfpgpool.users.0]
+# server_username = "bpfpgpool"
+# server_password = "bpfpgpool"
+username = "bpfpgpool"
+password = "bpfpgpool"
 
-pool_size = 9
-min_pool_size = 3
+pool_size = 10
+min_pool_size = 1
 statement_timeout = 0
 
-[pools.test_bpf_pgcat.shards.0]
+[pools.bpfpgpool.shards.0]
 servers = [
 	[ "10.121.240.151", 5432, "primary" ],
 ]
-database = "test_bpf_pgcat"
+database = "bpfpgpool"

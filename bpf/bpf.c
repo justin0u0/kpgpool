@@ -15,7 +15,7 @@
 #define BACKEND_PORT 5432
 
 #define ENABLE_FAST_REDIRECT
-// #define ENABLE_DEBUG
+#define ENABLE_DEBUG
 
 typedef __u64 u64;
 typedef __u32 u32;
@@ -27,10 +27,10 @@ typedef __s16 i16;
 typedef __s8 i8;
 
 struct socket_4_tuple {
-	u32 local_ip4;
-	u32 local_port;
-	u32 remote_ip4;
-	u32 remote_port;
+	u32 local_ip4;		// network byte order
+	u32 local_port;		// host byte order
+	u32 remote_ip4;		// network byte order
+	u32 remote_port;	// network byte order
 };
 
 struct {
@@ -39,12 +39,6 @@ struct {
 	__type(key, struct socket_4_tuple);
 	__type(value, u32); // socket FD
 } sockmap SEC(".maps");
-
-struct {
-	__uint(type, BPF_MAP_TYPE_QUEUE);
-	__uint(max_entries, 1024);
-	__type(value, struct socket_4_tuple);
-} servers SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -63,6 +57,9 @@ int sockops_prog(struct bpf_sock_ops *skops) {
 		bpf_printk("[BPF_SOCK_OPS_PASSIVE_ESTABLISHED_CB] local [%u.%u.%u.%u:%u], remote [%u.%u.%u.%u:%u]",
 			FORMAT_IP(skops->local_ip4), skops->local_port,
 			FORMAT_IP(skops->remote_ip4), bpf_ntohl(skops->remote_port));
+		bpf_printk("[BPF_SOCK_OPS_PASSIVE_ESTABLISHED_CB] raw %x %x %x %x",
+			skops->local_ip4, skops->local_port,
+			skops->remote_ip4, skops->remote_port);
 #endif
 
 		if (skops->local_port == POOLER_PORT) {
@@ -88,6 +85,9 @@ int sockops_prog(struct bpf_sock_ops *skops) {
 		bpf_printk("[BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB] local [%u.%u.%u.%u:%u], remote [%u.%u.%u.%u:%u]",
 			FORMAT_IP(skops->local_ip4), skops->local_port,
 			FORMAT_IP(skops->remote_ip4), bpf_ntohl(skops->remote_port));
+		bpf_printk("[BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB] raw %x %x %x %x",
+			skops->local_ip4, skops->local_port,
+			skops->remote_ip4, skops->remote_port);
 #endif
 
 		if (bpf_ntohl(skops->remote_port) == BACKEND_PORT) {
@@ -105,14 +105,6 @@ int sockops_prog(struct bpf_sock_ops *skops) {
 				bpf_printk("[BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB] sockmap update");
 			}
 #endif
-			ret = bpf_map_push_elem(&servers, &key, BPF_ANY);
-#ifdef ENABLE_DEBUG
-			if (ret != 0) {
-				bpf_printk("[BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB] servers push failed: %d", ret);
-			} else {
-				bpf_printk("[BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB] servers push");
-			}
-#endif
 		}
 		break;
 	}
@@ -123,13 +115,30 @@ int sockops_prog(struct bpf_sock_ops *skops) {
 SEC("sk_skb/stream_parser/prog")
 int sk_skb_stream_parser_prog(struct __sk_buff *skb) {
 #ifdef ENABLE_DEBUG
-	bpf_printk("[sk_skb_stream_parser_prog] local [%u.%u.%u.%u:%u], remote [%u.%u.%u.%u:%u]",
+	bpf_printk("[sk_skb_stream_parser_prog] local [%u.%u.%u.%u:%u] | remote [%u.%u.%u.%u:%u] | len [%u] | data len [%u]",
 		FORMAT_IP(skb->local_ip4), skb->local_port,
-		FORMAT_IP(skb->remote_ip4), bpf_ntohl(skb->remote_port));
+		FORMAT_IP(skb->remote_ip4), bpf_ntohl(skb->remote_port), skb->len, skb->data_end - skb->data);
+
+	void* data = (void*)(long)skb->data;
+	void* data_end = (void*)(long)skb->data_end;
+
+	u8* code = (void*)data;
+	if ((void*)(code + 1) > data_end) {
+		bpf_printk("[sk_skb_stream_parser_prog] no code");
+		return skb->len;
+	}
+	i32* len = (void*)(code + 1);
+	if ((void*)(len + 1) > data_end) {
+		bpf_printk("[sk_skb_stream_parser_prog] no len");
+		return skb->len;
+	}
+	bpf_printk("[sk_skb_stream_parser_prog] code=[%u], len=[%d]", *code, bpf_ntohl(*len));
 #endif
+
 	return skb->len;
 }
 
+/*
 int fallback_redirect(struct __sk_buff *skb, struct socket_4_tuple* key) {
 	int ret = bpf_sk_redirect_hash(skb, &sockmap, key, BPF_F_INGRESS);
 #ifdef ENABLE_DEBUG
@@ -141,12 +150,13 @@ int fallback_redirect(struct __sk_buff *skb, struct socket_4_tuple* key) {
 #endif
 	return ret;
 }
+*/
 
 SEC("sk_skb/stream_verdict/prog")
 int sk_skb_stream_verdict_prog(struct __sk_buff *skb)
 {
 #ifdef ENABLE_DEBUG
-	bpf_printk("[sk_skb_stream_verdict_prog] local [%u.%u.%u.%u:%u], remote [%u.%u.%u.%u:%u], len [%u], data len [%u]",
+	bpf_printk("[sk_skb_stream_verdict_prog] local [%u.%u.%u.%u:%u] | remote [%u.%u.%u.%u:%u] | len [%u] | data len [%u]",
 		FORMAT_IP(skb->local_ip4), skb->local_port,
 		FORMAT_IP(skb->remote_ip4), bpf_ntohl(skb->remote_port), skb->len, skb->data_end - skb->data);
 #endif
@@ -157,7 +167,9 @@ int sk_skb_stream_verdict_prog(struct __sk_buff *skb)
 		.remote_ip4 = skb->remote_ip4,
 		.remote_port = skb->remote_port,
 	};
+	return bpf_sk_redirect_hash(skb, &sockmap, &key, BPF_F_INGRESS);
 
+	/*
 	void* data = (void*)(long)skb->data;
 	void* data_end = (void*)(long)skb->data_end;
 
@@ -177,94 +189,30 @@ int sk_skb_stream_verdict_prog(struct __sk_buff *skb)
 	}
 
 #ifdef ENABLE_DEBUG
-	bpf_printk("[sk_skb_stream_verdict_prog] code=[%u], len=[%d]", *code, *len);
+	bpf_printk("[sk_skb_stream_verdict_prog] code=[%u], len=[%d]", *code, bpf_ntohl(*len));
 #endif
 
 #ifdef ENABLE_FAST_REDIRECT
-	int ret;
-
 	if (skb->local_port == POOLER_PORT) {
 		if ((*code) == 'Q') {
-			// SimpleQuery, select a server from servers and redirect
-			struct socket_4_tuple server_key;
-			ret = bpf_map_pop_elem(&servers, &server_key);
-			if (ret != 0) {
 #ifdef ENABLE_DEBUG
-				bpf_printk("[sk_skb_stream_verdict_prog] servers pop failed: %d", ret);
+			bpf_printk("[sk_skb_stream_verdict_prog] Q: Query, should redirect to backend directly");
 #endif
-				return fallback_redirect(skb, &key);
-			}
-#ifdef ENABLE_DEBUG
-			bpf_printk("[sk_skb_stream_verdict_prog] servers pop");
-#endif
-
-			ret = bpf_map_update_elem(&pairs, &server_key, &key, BPF_ANY);
-			if (ret != 0) {
-#ifdef ENABLE_DEBUG
-				bpf_printk("[sk_skb_stream_verdict_prog] pairs update failed: %d", ret);
-#endif
-				return fallback_redirect(skb, &key);
-			}
-#ifdef ENABLE_DEBUG
-			bpf_printk("[sk_skb_stream_verdict_prog] pairs update");
-#endif
-
-			ret = bpf_sk_redirect_hash(skb, &sockmap, &server_key, 0);
-			if (ret == 0) {
-#ifdef ENABLE_DEBUG
-				bpf_printk("[sk_skb_stream_verdict_prog] sockmap redirect to server failed");
-#endif
-				return fallback_redirect(skb, &key);
-			}
-#ifdef ENABLE_DEBUG
-			bpf_printk("[sk_skb_stream_verdict_prog] sockmap redirect to server");
-#endif
-			return ret;
 		}
 	} else if (bpf_ntohl(skb->remote_port) == BACKEND_PORT) {
 		if ((*code) == 'T' || (*code) == 'I' || (*code) == 'C') {
-			// T: RowDescription, push server back to servers, and redirect
-			// I: EmptyQueryResponse, push server back to servers, and redirect
-			// C: CommandComplete, push server back to servers, and redirect
-			struct socket_4_tuple* client_key;
-			client_key = bpf_map_lookup_elem(&pairs, &key);
-			if (client_key == NULL) {
+			// T: RowDescription
+			// I: EmptyQueryResponse
+			// C: CommandComplete
 #ifdef ENABLE_DEBUG
-				bpf_printk("[sk_skb_stream_verdict_prog] pairs lookup failed");
+			bpf_printk("[sk_skb_stream_verdict_prog] T/I/C: RowDescription/EmptyQueryResponse/CommandComplete, should redirect to client directly");
 #endif
-				return fallback_redirect(skb, &key);
-			}
-#ifdef ENABLE_DEBUG
-			bpf_printk("[sk_skb_stream_verdict_prog] pairs lookup");
-#endif
-
-			ret = bpf_map_push_elem(&servers, &key, BPF_ANY);
-			if (ret != 0) {
-#ifdef ENABLE_DEBUG
-				bpf_printk("[sk_skb_stream_verdict_prog] servers push failed: %d", ret);
-#endif
-				return fallback_redirect(skb, &key);
-			}
-#ifdef ENABLE_DEBUG
-			bpf_printk("[sk_skb_stream_verdict_prog] servers push");
-#endif
-
-			ret = bpf_sk_redirect_hash(skb, &sockmap, client_key, 0);
-			if (ret == 0) {
-#ifdef ENABLE_DEBUG
-				bpf_printk("[sk_skb_stream_verdict_prog] sockmap redirect to client failed");
-#endif
-				return fallback_redirect(skb, &key);
-			}
-#ifdef ENABLE_DEBUG
-			bpf_printk("[sk_skb_stream_verdict_prog] sockmap redirect to client");
-#endif
-			return ret;
 		}
 	}
 #endif
 
 	return fallback_redirect(skb, &key);
+	*/
 }
 
 char _license[] SEC("license") = "GPL";
