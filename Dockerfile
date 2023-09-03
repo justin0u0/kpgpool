@@ -5,16 +5,22 @@ USER root
 RUN apt-get update && apt-get install -y bpftool iproute2 lsof tshark
 
 COPY bin/bpfpgpool /usr/local/bin/bpfpgpool
+# COPY scripts/pgbouncer-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+# CMD ["/usr/local/bin/docker-entrypoint.sh"]
+
+# latest
+FROM ghcr.io/postgresml/pgcat AS bpfpgpool-pgcat
 
 # v1.1.1
-FROM ghcr.io/postgresml/pgcat:1f2c6507f7fb5461df1a599c0b380aa114597bb5 AS bpfpgpool-pgcat
+# FROM ghcr.io/postgresml/pgcat:1f2c6507f7fb5461df1a599c0b380aa114597bb5 AS bpfpgpool-pgcat
 
 # v1.0.0
 # FROM ghcr.io/postgresml/pgcat:0d5feac4b299ab9eac8cdb6641d06b0606696442 AS bpfpgpool-pgcat
 
 USER root
 
-RUN apt-get update && apt-get install -y bpftool iproute2 lsof tshark postgresql-client netcat
+RUN apt-get update && apt-get install -y bpftool iproute2 lsof tshark postgresql-client
 
 COPY bin/bpfpgpool /usr/local/bin/bpfpgpool
 COPY scripts/pgcat-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
