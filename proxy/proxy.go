@@ -28,7 +28,7 @@ func (p *Proxy) Serve() error {
 		return nil
 	}
 
-	ln, err := net.Listen("tcp", p.localAddr)
+	ln, err := net.Listen("tcp4", p.localAddr)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}

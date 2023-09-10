@@ -12,6 +12,25 @@ BEGIN
 	printf("%-20s %-5s %-20s %-5s %s\n", "RADDR", "RPORT", "LADDR", "LPORT", "EVENT");
 }
 
+// Not gonna work as Go uses epoll
+/*
+tracepoint:syscalls:sys_enter_recvfrom
+{
+	if (comm != "bpfpgpool") {
+		return;
+	}
+
+	$fd = args->fd;
+	$addr_in = (struct sockaddr_in *)args->addr;
+	$addr = ntop($addr_in->sin_addr.s_addr);
+	$port = $addr_in->sin_port;
+
+	time("%H:%M:%S ");
+	printf("%-6d %-14s ", pid, comm);
+	printf("%-20s %-5d %-20s %-5d %s fd=%d\n", $addr, $port, "", 0, "syscalls:sys_enter_recvfrom", $fd);
+}
+*/
+
 kretprobe:inet_csk_accept
 {
 	if (comm != "bpfpgpool") {
@@ -35,7 +54,6 @@ kretprobe:inet_csk_accept
 	printf("%-20s %-5d %-20s %-5d %s\n", $daddr, $dport, $saddr, $lport, "inet_csk_accept");
 }
 
-/*
 kprobe:sock_recvmsg
 {
 	if (comm != "bpfpgpool") {
@@ -59,7 +77,6 @@ kprobe:sock_recvmsg
 	printf("%-6d %-14s ", pid, comm);
 	printf("%-20s %-5d %-20s %-5d %s\n", $daddr, $dport, $saddr, $lport, "sock_recvmsg");
 }
-*/
 
 kprobe:inet_recvmsg
 {
