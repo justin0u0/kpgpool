@@ -1,0 +1,164 @@
+#ifndef BPFTRACE_HAVE_BTF
+#include <linux/socket.h>
+#include <net/sock.h>
+#else
+#include <sys/socket.h>
+#endif
+
+BEGIN
+{
+	printf("Tracing TCP . Hit Ctrl-C to end.\n");
+	printf("%-8s %-6s %-14s ", "TIME", "PID", "COMM");
+	printf("%-20s %-5s %-20s %-5s %s\n", "RADDR", "RPORT", "LADDR", "LPORT", "EVENT");
+}
+
+kretprobe:inet_csk_accept
+{
+	if (comm != "bpfpgpool") {
+		return;
+	}
+
+	$sk = (struct sock *)retval;
+
+	$daddr = ntop($sk->__sk_common.skc_daddr);
+	$saddr = ntop($sk->__sk_common.skc_rcv_saddr);
+	$lport = $sk->__sk_common.skc_num;
+	$dport = $sk->__sk_common.skc_dport;
+	$dport = bswap($dport);
+
+	if ($lport != 6432) {
+		return;
+	}
+
+	time("%H:%M:%S ");
+	printf("%-6d %-14s ", pid, comm);
+	printf("%-20s %-5d %-20s %-5d %s\n", $daddr, $dport, $saddr, $lport, "inet_csk_accept");
+}
+
+/*
+kprobe:sock_recvmsg
+{
+	if (comm != "bpfpgpool") {
+		return;
+	}
+
+	$sock = (struct socket*)arg0;
+	$sk = (struct sock*)$sock->sk;
+
+	$daddr = ntop($sk->__sk_common.skc_daddr);
+	$saddr = ntop($sk->__sk_common.skc_rcv_saddr);
+	$lport = $sk->__sk_common.skc_num;
+	$dport = $sk->__sk_common.skc_dport;
+	$dport = bswap($dport);
+
+	if ($lport != 6432) {
+		return;
+	}
+
+	time("%H:%M:%S ");
+	printf("%-6d %-14s ", pid, comm);
+	printf("%-20s %-5d %-20s %-5d %s\n", $daddr, $dport, $saddr, $lport, "sock_recvmsg");
+}
+*/
+
+kprobe:inet_recvmsg
+{
+	if (comm != "bpfpgpool") {
+		return;
+	}
+
+	$sock = (struct socket*)arg0;
+	$sk = (struct sock*)$sock->sk;
+
+	$daddr = ntop($sk->__sk_common.skc_daddr);
+	$saddr = ntop($sk->__sk_common.skc_rcv_saddr);
+	$lport = $sk->__sk_common.skc_num;
+	$dport = $sk->__sk_common.skc_dport;
+	$dport = bswap($dport);
+	$name = $sk->__sk_common.skc_prot->name;
+
+	if ($lport != 6432) {
+		return;
+	}
+
+	time("%H:%M:%S ");
+	printf("%-6d %-14s ", pid, comm);
+	printf("%-20s %-5d %-20s %-5d %s %s\n", $daddr, $dport, $saddr, $lport, "inet_recvmsg", $name);
+}
+
+kprobe:tcp_recvmsg
+{
+	if (comm != "bpfpgpool") {
+		return;
+	}
+
+	$sk = (struct sock*)arg0;
+
+	$daddr = ntop($sk->__sk_common.skc_daddr);
+	$saddr = ntop($sk->__sk_common.skc_rcv_saddr);
+	$lport = $sk->__sk_common.skc_num;
+	$dport = $sk->__sk_common.skc_dport;
+	$dport = bswap($dport);
+
+	if ($lport != 6432) {
+		return;
+	}
+
+	time("%H:%M:%S ");
+	printf("%-6d %-14s ", pid, comm);
+	printf("%-20s %-5d %-20s %-5d %s\n", $daddr, $dport, $saddr, $lport, "tcp_recvmsg");
+}
+
+kprobe:tcp_bpf_recvmsg
+{
+	$sk = (struct sock*)arg0;
+
+	$daddr = ntop($sk->__sk_common.skc_daddr);
+	$saddr = ntop($sk->__sk_common.skc_rcv_saddr);
+	$lport = $sk->__sk_common.skc_num;
+	$dport = $sk->__sk_common.skc_dport;
+	$dport = bswap($dport);
+
+	time("%H:%M:%S ");
+	printf("%-6d %-14s ", pid, comm);
+	printf("%-20s %-5d %-20s %-5d %s\n", $daddr, $dport, $saddr, $lport, "tcp_bpf_recvmsg");
+}
+
+kprobe:tcp_bpf_recvmsg_parser
+{
+	if (comm != "bpfpgpool") {
+		return;
+	}
+
+	$sk = (struct sock*)arg0;
+
+	$daddr = ntop($sk->__sk_common.skc_daddr);
+	$saddr = ntop($sk->__sk_common.skc_rcv_saddr);
+	$lport = $sk->__sk_common.skc_num;
+	$dport = $sk->__sk_common.skc_dport;
+	$dport = bswap($dport);
+
+	time("%H:%M:%S ");
+	printf("%-6d %-14s ", pid, comm);
+	printf("%-20s %-5d %-20s %-5d %s\n", $daddr, $dport, $saddr, $lport, "tcp_bpf_recvmsg_parser");
+}
+
+kretprobe:tcp_bpf_recvmsg_parser
+{
+	if (comm != "bpfpgpool") {
+		return;
+	}
+
+	$ret = (uint32)retval;
+
+	time("%H:%M:%S ");
+	printf("%-6d %-14s ", pid, comm);
+	printf("%-20s %-5d %-20s %-5d %s=%d\n", "", 0, "", 0, "tcp_bpf_recvmsg_parser()", $ret);
+}
+
+/*
+kprobe:sock_hash_update_common
+{
+	
+}
+*/

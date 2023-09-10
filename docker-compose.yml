@@ -46,6 +46,19 @@ services:
       - ./conf/pgcat.toml:/etc/pgcat/pgcat.toml
     network_mode: host
 
+  bpfpgpool-proxy:
+    build:
+      context: .
+      target: bpfpgpool-proxy
+    container_name: bpfpgpool-proxy
+    restart: always
+    network_mode: host
+    privileged: true
+    volumes:
+      - /lib/modules:/lib/modules
+      - /usr/src:/usr/src
+      - /sys:/sys
+
   bpfpgpool-pgclient-1:
     build:
       context: .

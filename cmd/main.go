@@ -17,6 +17,8 @@ func main() {
 		loadBpfCommand(),
 		pgCommand(),
 		pgbouncerCommand(),
+		proxyCommand(),
+		clientCommand(),
 	)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)

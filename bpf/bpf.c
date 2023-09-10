@@ -40,13 +40,6 @@ struct {
 	__type(value, u32); // socket FD
 } sockmap SEC(".maps");
 
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 1024);
-	__type(key, struct socket_4_tuple);
-	__type(value, struct socket_4_tuple);
-} pairs SEC(".maps");
-
 SEC("sockops/prog")
 int sockops_prog(struct bpf_sock_ops *skops) {
 	u32 ret;

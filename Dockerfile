@@ -32,3 +32,13 @@ FROM golang:1.19 AS bpfpgpool-pgclient
 COPY bin/bpfpgpool /usr/local/bin/bpfpgpool
 
 CMD ["bpfpgpool", "pg", "loop-query", "-u", "host=10.121.240.150 port=6432 user=bpfpgpool password=bpfpgpool dbname=bpfpgpool sslmode=disable connect_timeout=5", "-c", "1"]
+
+FROM golang:1.19 AS bpfpgpool-proxy
+
+RUN apt-get update && apt-get install -y bpftool iproute2 lsof tshark strace bpftrace
+
+COPY bin/bpfpgpool /usr/local/bin/bpfpgpool
+COPY scripts/proxy-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+# CMD ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["bpfpgpool", "proxy", "-b"]

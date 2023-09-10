@@ -69,7 +69,6 @@ type bpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	Pairs   *ebpf.MapSpec `ebpf:"pairs"`
 	Sockmap *ebpf.MapSpec `ebpf:"sockmap"`
 }
 
@@ -92,13 +91,11 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	Pairs   *ebpf.Map `ebpf:"pairs"`
 	Sockmap *ebpf.Map `ebpf:"sockmap"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
-		m.Pairs,
 		m.Sockmap,
 	)
 }

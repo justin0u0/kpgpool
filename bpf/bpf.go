@@ -67,15 +67,6 @@ func attachSockopsProgram(p *ebpf.Program) (DetachFunc, error) {
 }
 
 func attachSkSkbProgram(objs *bpfObjects) (DetachFunc, error) {
-	/*
-		if err := link.RawAttachProgram(link.RawAttachProgramOptions{
-			Target:  objs.Sockmap.FD(),
-			Program: objs.SkSkbStreamParserProg,
-			Attach:  ebpf.AttachSkSKBStreamParser,
-		}); err != nil {
-			return nil, err
-		}
-	*/
 	if err := link.RawAttachProgram(link.RawAttachProgramOptions{
 		Target:  objs.Sockmap.FD(),
 		Program: objs.SkSkbStreamVerdictProg,
@@ -83,17 +74,22 @@ func attachSkSkbProgram(objs *bpfObjects) (DetachFunc, error) {
 	}); err != nil {
 		return nil, err
 	}
+	if err := link.RawAttachProgram(link.RawAttachProgramOptions{
+		Target:  objs.Sockmap.FD(),
+		Program: objs.SkSkbStreamParserProg,
+		Attach:  ebpf.AttachSkSKBStreamParser,
+	}); err != nil {
+		return nil, err
+	}
 
 	return func() {
-		/*
-			if err := link.RawDetachProgram(link.RawDetachProgramOptions{
-				Target:  objs.Sockmap.FD(),
-				Program: objs.SkSkbStreamParserProg,
-				Attach:  ebpf.AttachSkSKBStreamParser,
-			}); err != nil {
-				log.Printf("failed to detach sk_skb stream parser program: %v", err)
-			}
-		*/
+		if err := link.RawDetachProgram(link.RawDetachProgramOptions{
+			Target:  objs.Sockmap.FD(),
+			Program: objs.SkSkbStreamParserProg,
+			Attach:  ebpf.AttachSkSKBStreamParser,
+		}); err != nil {
+			log.Printf("failed to detach sk_skb stream parser program: %v", err)
+		}
 		if err := link.RawDetachProgram(link.RawDetachProgramOptions{
 			Target:  objs.Sockmap.FD(),
 			Program: objs.SkSkbStreamVerdictProg,
