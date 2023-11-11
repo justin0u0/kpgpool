@@ -1,25 +1,28 @@
 package proxy
 
 import (
-	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgproto3"
+	"github.com/justin0u0/bpfpgpool/bpf"
 )
 
 type Proxy struct {
 	remoteAddr string
 	localAddr  string
+	mapDAO     *bpf.MapDAO
 	ln         net.Listener
 }
 
-func NewProxy(remoteAddr, localAddr string) *Proxy {
+func NewProxy(remoteAddr, localAddr string, mapDAO *bpf.MapDAO) *Proxy {
 	return &Proxy{
 		remoteAddr: remoteAddr,
 		localAddr:  localAddr,
+		mapDAO:     mapDAO,
 	}
 }
 
@@ -67,7 +70,7 @@ func (p *Proxy) handleConn(lconn net.Conn) {
 	}
 	log.Println("Received startup message:", msg)
 
-	rconn, err := net.Dial("tcp4", p.remoteAddr)
+	rconn, err := net.DialTimeout("tcp4", p.remoteAddr, 1*time.Second)
 	if err != nil {
 		log.Println("Failed to connect to remote server:", err)
 		return
@@ -81,51 +84,66 @@ func (p *Proxy) handleConn(lconn net.Conn) {
 		log.Println("Failed to send startup message:", err)
 		return
 	}
+	log.Println("Sent startup message:", msg)
 
+	// Starting to forward traffic
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 
 	go func() {
+		log.Println("Starting to forward traffic from client to server")
 		defer wg.Done()
 
-		buf := make([]byte, 32768)
 		for {
-			n, err := lconn.Read(buf)
+			log.Println("Waiting to receive message from client")
+
+			msg, err := backend.Receive()
 			if err != nil {
-				log.Println("Failed to read from client:", err)
+				log.Println("Failed to receive message from client:", err)
 				return
 			}
+			log.Printf("Received message from client: %T(%+v)", msg, msg)
 
-			log.Printf("Received %d bytes from client\n%s\n\n", n, hex.Dump(buf[:n]))
-
-			if _, err := rconn.Write(buf[:n]); err != nil {
-				log.Println("Failed to write to server:", err)
+			frontend.Send(msg)
+			if err := frontend.Flush(); err != nil {
+				log.Println("Failed to send message to server:", err)
 				return
 			}
+			log.Printf("Sent message to server: %T(%+v)", msg, msg)
 		}
 	}()
 
 	go func() {
+		log.Println("Starting to forward traffic from server to client")
 		defer wg.Done()
 
-		buf := make([]byte, 32768)
 		for {
-			n, err := rconn.Read(buf)
+			log.Println("Waiting to receive message from server")
+
+			msg, err := frontend.Receive()
 			if err != nil {
-				log.Println("Failed to read from server:", err)
+				log.Println("Failed to receive message from server:", err)
 				return
 			}
+			log.Printf("Received message from server: %T(%+v)", msg, msg)
 
-			log.Printf("Received %d bytes from server\n%s\n\n", n, hex.Dump(buf[:n]))
-
-			if _, err := lconn.Write(buf[:n]); err != nil {
-				log.Println("Failed to write to client:", err)
+			backend.Send(msg)
+			if err := backend.Flush(); err != nil {
+				log.Println("Failed to send message to client:", err)
 				return
 			}
+			log.Printf("Sent message to client: %T(%+v)", msg, msg)
 		}
 	}()
 
+	go func() {
+		time.Sleep(5 * time.Second)
+		p.SetupBPFProxy(lconn, rconn)
+	}()
+
+	log.Println("Waiting for goroutines to finish")
 	wg.Wait()
+	log.Println("Goroutines finished")
 }
 
 func (p *Proxy) handleStartupMessage(backend *pgproto3.Backend) (pgproto3.FrontendMessage, error) {
@@ -142,4 +160,53 @@ func (p *Proxy) handleStartupMessage(backend *pgproto3.Backend) (pgproto3.Fronte
 	default:
 		return nil, fmt.Errorf("unexpected startup message: %T", msg)
 	}
+}
+
+func (p *Proxy) SetupBPFProxy(lconn, rconn net.Conn) {
+	lf, err := lconn.(*net.TCPConn).File()
+	if err != nil {
+		log.Println("Failed to get file descriptor of local connection:", err)
+		return
+	}
+	defer lf.Close()
+	lfd := uint32(lf.Fd())
+	clientPort := uint32(lconn.RemoteAddr().(*net.TCPAddr).Port)
+
+	rf, err := rconn.(*net.TCPConn).File()
+	if err != nil {
+		log.Println("Failed to get file descriptor of remote connection:", err)
+		return
+	}
+	defer rf.Close()
+	rfd := uint32(rf.Fd())
+	poolerPort := uint32(rconn.LocalAddr().(*net.TCPAddr).Port)
+
+	log.Println("Setting up BPF maps",
+		"[ clientPort ->", clientPort, "]",
+		"[ poolerPort ->", poolerPort, "]",
+		"[ lfd ->", lfd, "]",
+		"[ rfd ->", rfd, "]",
+	)
+
+	if err := p.mapDAO.SetP2C(poolerPort, clientPort); err != nil {
+		log.Println("Failed to set p2c map:", err)
+		return
+	}
+	log.Printf("Set p2c map: %d -> %d", poolerPort, clientPort)
+	if err := p.mapDAO.SetC2P(clientPort, poolerPort); err != nil {
+		log.Println("Failed to set c2p map:", err)
+		return
+	}
+	log.Printf("Set c2p map: %d -> %d", clientPort, poolerPort)
+
+	if err := p.mapDAO.SetP2SSockmap(poolerPort, rfd); err != nil {
+		log.Println("Failed to set p2s sockmap:", err)
+		return
+	}
+	log.Printf("Set p2s sockmap: %d -> %d", poolerPort, rfd)
+	if err := p.mapDAO.SetC2PSockmap(clientPort, lfd); err != nil {
+		log.Println("Failed to set c2p sockmap:", err)
+		return
+	}
+	log.Printf("Set c2p sockmap: %d -> %d", clientPort, lfd)
 }

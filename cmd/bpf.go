@@ -4,12 +4,14 @@ import (
 	"encoding/binary"
 	"log"
 	"net"
+	"net/http"
 	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/justin0u0/bpfpgpool/bpf"
+	"github.com/oraoto/go-pidfd"
 	"github.com/spf13/cobra"
 )
 
@@ -110,6 +112,46 @@ func runLoad(cmd *cobra.Command, args []string) {
 			}
 		}()
 	}
+
+	go func() {
+		http.HandleFunc("/sockfd", func(w http.ResponseWriter, r *http.Request) {
+			pid, err := strconv.Atoi(r.URL.Query().Get("pid"))
+			if err != nil {
+				log.Println("failed to parse pid:", err)
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(err.Error()))
+				return
+			}
+
+			fd, err := strconv.Atoi(r.URL.Query().Get("fd"))
+			if err != nil {
+				log.Println("failed to parse fd:", err)
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(err.Error()))
+				return
+			}
+
+			pidFd, err := pidfd.Open(pid, 0)
+			if err != nil {
+				log.Println("failed to open pidfd:", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(err.Error()))
+				return
+			}
+
+			sockFd, err := pidFd.GetFd(fd, 0)
+			if err != nil {
+				log.Println("failed to get fd:", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(err.Error()))
+				return
+			}
+			log.Println("got sock fd:", sockFd)
+
+			w.Write([]byte(strconv.Itoa(sockFd)))
+		})
+		http.ListenAndServe(":8787", nil)
+	}()
 
 	/*
 		if err := os.MkdirAll(bpffs, 0755); err != nil {

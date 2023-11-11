@@ -6,6 +6,7 @@ require (
 	github.com/cilium/ebpf v0.11.0
 	github.com/jackc/pgx/v5 v5.4.3
 	github.com/lib/pq v1.10.9
+	github.com/oraoto/go-pidfd v0.1.1
 	github.com/spf13/cobra v1.7.0
 )
 

@@ -12,8 +12,6 @@ BEGIN
 	printf("%-20s %-5s %-20s %-5s %s\n", "RADDR", "RPORT", "LADDR", "LPORT", "EVENT");
 }
 
-// Not gonna work as Go uses epoll
-/*
 tracepoint:syscalls:sys_enter_recvfrom
 {
 	if (comm != "bpfpgpool") {
@@ -29,7 +27,19 @@ tracepoint:syscalls:sys_enter_recvfrom
 	printf("%-6d %-14s ", pid, comm);
 	printf("%-20s %-5d %-20s %-5d %s fd=%d\n", $addr, $port, "", 0, "syscalls:sys_enter_recvfrom", $fd);
 }
-*/
+
+tracepoint:syscalls:sys_enter_recvmsg
+{
+	if (comm != "bpfpgpool") {
+		return;
+	}
+
+	$fd = args->fd;
+
+	time("%H:%M:%S ");
+	printf("%-6d %-14s ", pid, comm);
+	printf("%-20s %-5d %-20s %-5d %s fd=%d\n", "", 0, "", 0, "syscalls:sys_enter_recvmsg", $fd);
+}
 
 kretprobe:inet_csk_accept
 {
@@ -173,9 +183,40 @@ kretprobe:tcp_bpf_recvmsg_parser
 	printf("%-20s %-5d %-20s %-5d %s=%d\n", "", 0, "", 0, "tcp_bpf_recvmsg_parser()", $ret);
 }
 
-/*
 kprobe:sock_hash_update_common
 {
-	
+	if (comm != "bpfpgpool") {
+		return;
+	}
+
+	$sk = (struct sock*)arg2;
+
+	$daddr = ntop($sk->__sk_common.skc_daddr);
+	$saddr = ntop($sk->__sk_common.skc_rcv_saddr);
+	$lport = $sk->__sk_common.skc_num;
+	$dport = $sk->__sk_common.skc_dport;
+	$dport = bswap($dport);
+
+	time("%H:%M:%S ");
+	printf("%-6d %-14s ", pid, comm);
+	printf("%-20s %-5d %-20s %-5d %s\n", $daddr, $dport, $saddr, $lport, "sock_hash_update_common");
 }
-*/
+
+kprobe:sock_map_update_common
+{
+	if (comm != "bpfpgpool") {
+		return;
+	}
+
+	$sk = (struct sock*)arg2;
+
+	$daddr = ntop($sk->__sk_common.skc_daddr);
+	$saddr = ntop($sk->__sk_common.skc_rcv_saddr);
+	$lport = $sk->__sk_common.skc_num;
+	$dport = $sk->__sk_common.skc_dport;
+	$dport = bswap($dport);
+
+	time("%H:%M:%S ");
+	printf("%-6d %-14s ", pid, comm);
+	printf("%-20s %-5d %-20s %-5d %s\n", $daddr, $dport, $saddr, $lport, "sock_map_update_common");
+}

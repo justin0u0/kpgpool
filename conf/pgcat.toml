@@ -18,7 +18,7 @@ enable_prometheus_exporter = false
 prometheus_exporter_port = 9930
 
 # How long to wait before aborting a server connection (ms).
-connect_timeout = 5000
+connect_timeout = 1000
 
 # How much time to give `SELECT 1` health check query to return with a result (ms).
 healthcheck_timeout = 1000
@@ -61,8 +61,8 @@ sharding_function = "pg_bigint_hash"
 [pools.bpfpgpool.users.0]
 # server_username = "bpfpgpool"
 # server_password = "bpfpgpool"
-username = "bpfpgpool"
-password = "bpfpgpool"
+username = "postgres"
+password = "postgres"
 
 pool_size = 10
 min_pool_size = 1
@@ -72,4 +72,4 @@ statement_timeout = 0
 servers = [
 	[ "10.121.240.151", 5432, "primary" ],
 ]
-database = "bpfpgpool"
+database = "postgres"

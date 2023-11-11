@@ -41,4 +41,4 @@ COPY bin/bpfpgpool /usr/local/bin/bpfpgpool
 COPY scripts/proxy-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # CMD ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["bpfpgpool", "proxy", "-b"]
+CMD ["bpfpgpool", "proxy"]

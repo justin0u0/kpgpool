@@ -3,8 +3,7 @@ services:
     image: postgres:15.3
     container_name: postgres
     environment:
-      POSTGRES_PASSWORD: postgres
-    network_mode: host
+      POSTGRES_HOST_AUTH_METHOD: trust
 
   bpfpgpool-pgbouncer:
     build:
@@ -23,7 +22,7 @@ services:
       PGBOUNCER_IGNORE_STARTUP_PARAMETERS: extra_float_digits
       PGBOUNCER_EXTRA_FLAGS: --verbose
       ENABLE_BPF: true
-      ENABLE_TSHARK: true
+      # ENABLE_TSHARK: true
     image: bpfpgpool:pgbouncer
     privileged: true
     network_mode: host
@@ -52,12 +51,12 @@ services:
       target: bpfpgpool-proxy
     container_name: bpfpgpool-proxy
     restart: always
-    network_mode: host
     privileged: true
     volumes:
       - /lib/modules:/lib/modules
       - /usr/src:/usr/src
       - /sys:/sys
+    network_mode: host
 
   bpfpgpool-pgclient-1:
     build:
@@ -66,7 +65,7 @@ services:
     image: bpfpgpool:pgclient
     restart: always
     network_mode: host
-
+  
   # bpfpgpool-pgclient-2:
   #   build:
   #     context: .
@@ -80,3 +79,16 @@ services:
   #     target: bpfpgpool-pgclient
   #   image: bpfpgpool:pgclient
   #   restart: always
+
+  # bpfpgpool-client:
+  #   image: ubuntu:22.04
+  #   command: ["tail", "-f", "/dev/null"]
+  #   container_name: bpfpgpool-client
+  #   restart: always
+  #   networks:
+  #     - bpfpgpool
+
+networks:
+  bpfpgpool:
+    name: bpfpgpool
+    driver: bridge

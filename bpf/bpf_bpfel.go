@@ -12,13 +12,6 @@ import (
 	"github.com/cilium/ebpf"
 )
 
-type bpfSocket4Tuple struct {
-	LocalIp4   uint32
-	LocalPort  uint32
-	RemoteIp4  uint32
-	RemotePort uint32
-}
-
 // loadBpf returns the embedded CollectionSpec for bpf.
 func loadBpf() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_BpfBytes)
@@ -69,7 +62,10 @@ type bpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	Sockmap *ebpf.MapSpec `ebpf:"sockmap"`
+	C2p        *ebpf.MapSpec `ebpf:"c2p"`
+	C2pSockmap *ebpf.MapSpec `ebpf:"c2pSockmap"`
+	P2c        *ebpf.MapSpec `ebpf:"p2c"`
+	P2sSockmap *ebpf.MapSpec `ebpf:"p2sSockmap"`
 }
 
 // bpfObjects contains all objects after they have been loaded into the kernel.
@@ -91,12 +87,18 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	Sockmap *ebpf.Map `ebpf:"sockmap"`
+	C2p        *ebpf.Map `ebpf:"c2p"`
+	C2pSockmap *ebpf.Map `ebpf:"c2pSockmap"`
+	P2c        *ebpf.Map `ebpf:"p2c"`
+	P2sSockmap *ebpf.Map `ebpf:"p2sSockmap"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
-		m.Sockmap,
+		m.C2p,
+		m.C2pSockmap,
+		m.P2c,
+		m.P2sSockmap,
 	)
 }
 

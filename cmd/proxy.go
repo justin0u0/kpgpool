@@ -13,48 +13,29 @@ func proxyCommand() *cobra.Command {
 		Use: "proxy",
 		Run: runProxy,
 	}
-	cmd.Flags().BoolP("bpf", "b", false, "enable bpf")
 
 	return cmd
 }
 
 func runProxy(cmd *cobra.Command, args []string) {
-	bpfEnabled, err := cmd.Flags().GetBool("bpf")
+	objs, err := bpf.LoadObjects()
 	if err != nil {
-		log.Fatalf("failed to get bpf flag: %v", err)
+		log.Fatalf("failed to load bpf objects: %v", err)
 	}
-	log.Printf("bpf enabled: %v", bpfEnabled)
+	defer objs.Close()
+	log.Println("Loaded bpf objects")
 
-	if bpfEnabled {
-		objs, err := bpf.LoadObjects()
-		if err != nil {
-			log.Fatalf("failed to load bpf objects: %v", err)
-		}
-		defer objs.Close()
-		log.Println("Loaded bpf objects")
-
-		{
-			detach, err := bpf.AttachProgram(objs, bpf.ProgramSockops)
-			if err != nil {
-				log.Fatalf("failed to attach program: %v", err)
-			}
-			defer detach()
-			log.Println("Attached sockops program")
-		}
-
-		{
-			detach, err := bpf.AttachProgram(objs, bpf.ProgramSkSkb)
-			if err != nil {
-				log.Fatalf("failed to attach program: %v", err)
-			}
-			defer detach()
-			log.Println("Attached sk_skb program")
-		}
+	detach, err := bpf.AttachProgram(objs, bpf.ProgramSkSkb)
+	if err != nil {
+		log.Fatalf("failed to attach program: %v", err)
 	}
+	defer detach()
+	log.Println("Attached sk_skb program")
 
 	p := proxy.NewProxy(
 		"10.121.240.151:5432",
-		"10.121.240.150:6432",
+		":6432",
+		&bpf.MapDAO{Objs: objs},
 	)
 	if err := p.Serve(); err != nil {
 		panic(err)

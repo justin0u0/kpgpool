@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgproto3"
 )
@@ -34,34 +35,89 @@ func (c *pgStepClient) Start(ctx context.Context) {
 			"user":             "postgres",
 			"database":         "postgres",
 			"client_encoding":  "UTF8",
-			"application_name": "bpfpgpool",
+			"application_name": "psql",
 		},
 	}
 
 	frontend := pgproto3.NewFrontend(conn, conn)
-	frontend.Send(startupMsg)
-	if err := frontend.Flush(); err != nil {
-		log.Fatal("Failed to send startup message:", err)
+
+	{
+		// Send startup message
+
+		frontend.Send(startupMsg)
+		if err := conn.SetWriteDeadline(time.Now().Add(1 * time.Second)); err != nil {
+			log.Fatal("Failed to set write deadline:", err)
+		}
+		if err := frontend.Flush(); err != nil {
+			log.Fatal("Failed to send startup message:", err)
+		}
+		log.Println("Sent startup message done")
+
+		for {
+			if err := conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+				log.Fatal("Failed to set read deadline:", err)
+			}
+			msg, err := frontend.Receive()
+			if err != nil {
+				log.Fatal("Failed to receive startup message response:", err)
+			}
+
+			log.Printf("Received startup message response: %T %+v\n", msg, msg)
+			if _, ok := msg.(*pgproto3.ReadyForQuery); ok {
+				break
+			}
+		}
+
+		c.Wait(ctx)
 	}
-	log.Println("Sent startup message done")
 
-	c.Wait(ctx)
+	{
+		// Send simple query
 
-	frontend.Send(&pgproto3.Query{
-		String: "SELECT 1;",
-	})
-	if err := frontend.Flush(); err != nil {
-		log.Fatal("Failed to send query:", err)
+		frontend.Send(&pgproto3.Query{
+			String: "SELECT 1;",
+		})
+		if err := conn.SetWriteDeadline(time.Now().Add(1 * time.Second)); err != nil {
+			log.Fatal("Failed to set write deadline:", err)
+		}
+		if err := frontend.Flush(); err != nil {
+			log.Fatal("Failed to send query:", err)
+		}
+		log.Println("Sent query done")
+
+		if err := conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+			log.Fatal("Failed to set read deadline:", err)
+		}
+		msg, err := frontend.Receive()
+		if err != nil {
+			log.Fatal("Failed to receive query response:", err)
+		}
+		log.Println("Received query response:", msg)
+
+		c.Wait(ctx)
 	}
-	log.Println("Sent query done")
 
-	c.Wait(ctx)
+	{
+		// Send terminate
 
-	frontend.Send(&pgproto3.Terminate{})
-	if err := frontend.Flush(); err != nil {
-		log.Fatal("Failed to send terminate:", err)
+		frontend.Send(&pgproto3.Terminate{})
+		if err := conn.SetWriteDeadline(time.Now().Add(1 * time.Second)); err != nil {
+			log.Fatal("Failed to set write deadline:", err)
+		}
+		if err := frontend.Flush(); err != nil {
+			log.Fatal("Failed to send terminate:", err)
+		}
+		log.Println("Sent terminate done")
+
+		if err := conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+			log.Fatal("Failed to set read deadline:", err)
+		}
+		msg, err := frontend.Receive()
+		if err != nil {
+			log.Fatal("Failed to receive terminate response:", err)
+		}
+		log.Println("Received terminate response:", msg)
 	}
-	log.Println("Sent terminate done")
 }
 
 // Wait waits for STDIN or ctx.Done()
